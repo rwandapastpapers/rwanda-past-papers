@@ -106,6 +106,45 @@ function forceDownloadUrl(url,name='exam.html'){
     return u.href;
   }catch{return url;}
 }
+
+/* NEW: Fetch the HTML file and open it from a text/html Blob in a new tab.
+   This lets the browser render it as an exam instead of displaying source code. */
+async function openExam(event,link){
+  event.preventDefault();
+  const url=link.dataset.examUrl;
+  const examTab=window.open('about:blank','_blank');
+
+  if(!examTab){
+    alert('Please allow pop-ups for this website, then try Start Exam again.');
+    return;
+  }
+
+  try{
+    examTab.document.open();
+    examTab.document.write('<!DOCTYPE html><html><head><title>Loading exam...</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:Arial,sans-serif;text-align:center;padding:40px"><h2>Loading exam...</h2><p>Please wait.</p></body></html>');
+    examTab.document.close();
+
+    const response=await fetch(url,{mode:'cors',cache:'no-store'});
+    if(!response.ok)throw new Error('HTTP '+response.status);
+
+    const html=await response.text();
+    if(!html.trim())throw new Error('The HTML exam file is empty.');
+
+    const examBlob=new Blob([html],{type:'text/html;charset=utf-8'});
+    const examBlobUrl=URL.createObjectURL(examBlob);
+    examTab.location.replace(examBlobUrl);
+  }catch(error){
+    console.error('Could not open exam:',error);
+    try{
+      examTab.document.open();
+      examTab.document.write('<!DOCTYPE html><html><head><title>Exam could not open</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="font-family:Arial,sans-serif;padding:25px;line-height:1.6"><h2>Unable to open this exam</h2><p>The browser could not load the HTML file from storage.</p><p>Please check the Supabase Storage CORS settings and try again.</p><p>Error: '+esc(error.message)+'</p></body></html>');
+      examTab.document.close();
+    }catch(displayError){
+      alert('Could not open exam: '+error.message);
+    }
+  }
+}
+
 function cardHtml(p){
   let img=safeUrl(p.thumbnail_url),app=safeUrl(p.application_url),vid=safeUrl(p.video_url),resources=Array.isArray(p.resources)?p.resources:[];
   let links='';
@@ -117,7 +156,7 @@ function cardHtml(p){
     let name=r.name||'Download resource';
     if(isHtmlResource(u,name)){
       let download=forceDownloadUrl(u,name);
-      links+=`<a class="exam-open" href="${esc(u)}" target="_blank" rel="noopener">▶ Start Exam</a>`;
+      links+=`<a class="exam-open" href="${esc(u)}" data-exam-url="${esc(u)}" onclick="openExam(event,this)">▶ Start Exam</a>`;
       links+=`<a class="html-download" href="${esc(download)}" target="_blank" rel="noopener">↓ Download HTML</a>`;
     }else{
       links+=`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(name)}</a>`;
